@@ -20,7 +20,7 @@
 % API
 -export([start_link/3,
 	 get_socket/4,
-	 return_socket/3]).
+	 return_socket/3,
 	 return_unusable_socket/2]).
 
 %% Callbacks
