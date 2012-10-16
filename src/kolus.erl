@@ -62,6 +62,7 @@ connect(Identifier, {Ip, Port}, Opts) ->
 	    connect(Identifier, Pid, Opts)
     end.
 
+-spec return(#kolus_socket{}) -> ok.
 return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}) ->
     kolus_manager:return_socket(Manager, Ref, Socket).
 
