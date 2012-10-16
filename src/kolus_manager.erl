@@ -15,6 +15,7 @@
 	       }).
 
 -define(IDLE_TIMEOUT, kolus_app:config(manager_idle_timeout)).
+-define(SOCK_IDLE_TIMEOUT, kolus_app:config(socket_idle_timeout)).
 
 % API
 -export([start_link/3,
@@ -127,7 +128,7 @@ return_socket(_, false, ActiveSockets, IdleSockets) ->
     {ActiveSockets, IdleSockets};
 return_socket(Socket, {CallerMonitorRef, _}, ActiveSockets, IdleSockets) ->
     erlang:demonitor(CallerMonitorRef),
-    TimerRef = erlang:start_timer(kolus_helper:get_env(socket_timeout), self(), close),
+    TimerRef = erlang:start_timer(?SOCK_IDLE_TIMEOUT, self(), close),
     {remove_socket(CallerMonitorRef, ActiveSockets),
      IdleSockets++[{TimerRef, Socket}]}.
 
