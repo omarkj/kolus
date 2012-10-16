@@ -64,9 +64,10 @@ handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[],
     decrement_unused(Tid),
     {reply, {create, CallerMonitorRef, Ip, Port}, State#state{active_sockets=add_socket(CallerMonitorRef, undefined, Active)}};
 
-handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[{TimerRef,Socket}|Sockets]=Idle,
-						     active_sockets=Active,tid=Tid,
-						     identifier=Identifier}=State) when length(Idle) > 0 ->
+handle_call({get, Identifier, Caller}, _From,
+            #state{idle_sockets = [{TimerRef, Socket} | Sockets],
+                   active_sockets = Active, tid = Tid,
+                   identifier = Identifier} = State) ->
     cancel_timer(TimerRef),
     CallerMonitorRef = erlang:monitor(process, Caller),
     decrement_idle(Tid),
