@@ -14,6 +14,8 @@
 		closed=false::boolean()
 	       }).
 
+-define(IDLE_TIMEOUT, kolus_app:config(manager_idle_timeout)).
+
 % API
 -export([start_link/3,
 	 get_socket/4,
@@ -41,7 +43,7 @@ init([Identifier, Ip, Port]) ->
     ets:insert(Tid, [{idle,0},{unused,Limit}]),
     {ok, #state{ip=Ip,port=Port,
 		limit=Limit,identifier=Identifier,
-		tid=Tid}, kolus_helper:get_env(socket_timeout)}.
+		tid=Tid}, ?IDLE_TIMEOUT}.
 
 handle_cast({return, CallerMonitorRef, Socket}, #state{active_sockets=ActiveSockets,tid=Tid,
 						       idle_sockets=IdleSockets}=State) ->
