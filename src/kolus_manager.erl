@@ -39,7 +39,7 @@ return_socket(Pid, Ref, Socket) ->
 init([Identifier, Ip, Port]) ->
     Tid = ets:new(kolus_managers, [set,protected]),
     true = gproc:reg(?LOOKUP_PID({Ip, Port}), Tid),
-    Limit = kolus_helper:get_env(socket_limit),
+    Limit = kolus_app:config(endpoint_connection_limit),
     ets:insert(Tid, [{idle,0},{unused,Limit}]),
     {ok, #state{ip=Ip,port=Port,
 		limit=Limit,identifier=Identifier,
