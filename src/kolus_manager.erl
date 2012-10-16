@@ -142,4 +142,4 @@ cancel_timer(Ref) ->
         _Time ->
             %% Timer didn't fire, so no message to worry about
             ok
-    end
+    end.
