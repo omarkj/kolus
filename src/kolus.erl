@@ -3,6 +3,7 @@
 -export([status/1,
 	 connect/2,
 	 return/1,
+	 return_unusable/1,
 	 get_socket/1]).
 
 -include("kolus_internal.hrl").
@@ -63,6 +64,10 @@ connect(Identifier, {Ip, Port}, Opts) ->
 
 return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}) ->
     kolus_manager:return_socket(Manager, Ref, Socket).
+
+-spec return_unusable(#kolus_socket{}) -> ok.
+return_unusable(#kolus_socket{manager=Manager,ref=Ref}) ->
+    kolus_manager:return_unusable_socket(Manager, Ref).
 
 % Internal
 check_backends(Backends) ->

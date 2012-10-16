@@ -21,6 +21,7 @@
 -export([start_link/3,
 	 get_socket/4,
 	 return_socket/3]).
+	 return_unusable_socket/2]).
 
 %% Callbacks
 -export([init/1, handle_cast/2, handle_call/3,
@@ -37,6 +38,9 @@ return_socket(Pid, Ref, Socket) ->
     ok = gen_tcp:controlling_process(Socket, Pid),
     gen_server:cast(Pid, {return, Ref, Socket}).
 
+return_unusable_socket(Pid, Ref) ->
+    gen_server:cast(Pid, {return_unusable, Ref}).
+
 init([Identifier, Ip, Port]) ->
     Tid = ets:new(kolus_managers, [set,protected]),
     true = gproc:reg(?LOOKUP_PID({Ip, Port}), Tid),
@@ -52,6 +56,13 @@ handle_cast({return, CallerMonitorRef, Socket}, #state{active_sockets=ActiveSock
     {ActiveSockets0, IdleSockets0} = return_socket(Socket, FoundSocket, ActiveSockets, IdleSockets),
     increment_idle(Tid),
     {noreply, State#state{idle_sockets=IdleSockets0, active_sockets=ActiveSockets0}};
+handle_cast({return_unusable, CallerMonitorRef}, #state{active_sockets=ActiveSockets,
+							tid=Tid}=State) ->
+    FoundSocket = find_socket(CallerMonitorRef, ActiveSockets),
+    ActiveSockets0 = remove_dead_socket(FoundSocket, ActiveSockets),
+    increment_unused(Tid),
+    {noreply, State#state{active_sockets=ActiveSockets0}};
+    
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -124,6 +135,10 @@ add_socket(MonitorRef, Socket, List) ->
 remove_socket(MonitorRef, List) ->
     lists:keydelete(MonitorRef, 1, List).
 
+remove_dead_socket({CallerMonitorRef,_}, Sockets) ->
+    erlang:demonitor(CallerMonitorRef, [flush]),
+    remove_socket(CallerMonitorRef, Sockets).
+    
 return_socket(_, false, ActiveSockets, IdleSockets) ->
     {ActiveSockets, IdleSockets};
 return_socket(Socket, {CallerMonitorRef, _}, ActiveSockets, IdleSockets) ->
