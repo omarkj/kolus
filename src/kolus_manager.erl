@@ -127,7 +127,7 @@ remove_socket(MonitorRef, List) ->
 return_socket(_, false, ActiveSockets, IdleSockets) ->
     {ActiveSockets, IdleSockets};
 return_socket(Socket, {CallerMonitorRef, _}, ActiveSockets, IdleSockets) ->
-    erlang:demonitor(CallerMonitorRef),
+    erlang:demonitor(CallerMonitorRef, [flush]),
     TimerRef = erlang:start_timer(?SOCK_IDLE_TIMEOUT, self(), close),
     {remove_socket(CallerMonitorRef, ActiveSockets),
      IdleSockets++[{TimerRef, Socket}]}.
