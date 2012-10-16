@@ -90,7 +90,7 @@ handle_info({timeout, TimerRef, close}, #state{idle_sockets=Idle,tid=Tid}=State)
 
 handle_info(timeout, State) ->
     {stop, normal, State};
-    
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -110,7 +110,7 @@ increment_unused(Tid) ->
     ets:update_counter(Tid, unused, 1).
 decrement_unused(Tid) ->
     ets:update_counter(Tid, unused, -1).
-    
+
 close_socket(Socket) ->
     gen_tcp:close(Socket).
 
