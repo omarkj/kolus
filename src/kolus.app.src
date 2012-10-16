@@ -1,3 +1,4 @@
+%%% -*- mode: erlang -*-
 {application, kolus,
  [
   {description, "TCP connection balancing manager"},
