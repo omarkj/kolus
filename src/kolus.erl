@@ -1,0 +1,87 @@
+-module(kolus).
+
+-export([status/1,
+	 connect/2,
+	 return/1,
+	 get_socket/1]).
+
+-include("kolus_internal.hrl").
+-include("kolus.hrl").
+
+-record(kolus_socket, {ref :: reference(),
+		       socket :: port(),
+		       manager :: pid()}).
+
+-type kolus_socket() :: #kolus_socket{}.
+-type backend() :: {inet:ip_address(), inet:port_number()}.
+-type backend_info() :: {limit, pos_integer()}|{idle, pos_integer()}.
+-type backend_status() :: {backend(), pid()|undefined, [backend_info()]}.
+-type connect_opts() :: {timeout, pos_integer()}.
+
+-spec get_socket(kolus_socket()) -> port().
+get_socket(#kolus_socket{socket=Socket}) ->
+    Socket.
+
+-spec status([backend()]) -> [backend_status()]|[].
+status(Backends) ->
+    check_backends(Backends).
+
+-spec connect(any(), pid()|backend()) ->
+		     {ok, kolus_socket()}.
+connect(Opaque, Backend) ->
+    connect(Opaque, Backend, []).
+
+-spec connect(any(), pid()|backend(), [connect_opts()]) ->
+		     {ok, kolus_socket()}.
+connect(Identifier, Pid, Opts) when is_pid(Pid) ->
+    Caller = kolus_helper:get_key_or_default(caller, Opts, self()),
+    case kolus_manager:get_socket(Pid, Identifier, Caller, Opts) of
+	{create, Ref, Ip, Port} ->
+	    % No idle socket, create a new one
+	    Socket = create_connection(Ip, Port),
+	    {socket, #kolus_socket{ref=Ref,
+				   manager=Pid,
+				   socket=Socket}};
+	{socket, _Ref, _Socket} ->
+	    % Got an idle socket use it
+	    throw(not_implemented);
+	rejected ->
+	    % Got rejected
+	    throw(not_implemented)
+    end;
+connect(Identifier, {Ip, Port}, Opts) ->
+    case gproc:lookup_pids(?LOOKUP_PID({Ip,Port})) of
+	[Pid] ->
+	    % Someone beat us to creating a manager
+	    connect(Identifier, Pid, Opts);
+	[] ->
+	    % Lets create a manager
+	    Pid = kolus_managers_sup:create_manager(Identifier, Ip, Port),
+	    connect(Identifier, Pid, Opts)
+    end.
+
+return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}) ->
+    kolus_manager:return_socket(Manager, Ref, Socket).
+
+% Internal
+check_backends(Backends) ->
+    check_backends(Backends, []).
+
+check_backends([], Res) ->
+    Res;
+check_backends([Backend|Backends], Res) ->
+    Status = get_status(Backend, gproc:lookup_values(?LOOKUP_PID(Backend))),
+    check_backends(Backends, Res ++ Status).
+
+get_status(_,[]) ->
+    [];
+get_status(Backend,[{Pid, Tid}]) ->
+    [{Backend, Pid,ets:tab2list(Tid)}].
+
+create_connection(Ip, Port) ->
+    case gen_tcp:connect(Ip, Port, [{active, false}]) of
+	{ok, Socket} ->
+	    Socket;
+	{error, Error} ->
+	    {error, Error}
+    end.
