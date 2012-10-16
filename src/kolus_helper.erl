@@ -1,11 +1,6 @@
 -module(kolus_helper).
 
--export([get_env/1,
-	 get_key_or_default/3]).
-
-get_env(Key) ->
-    {ok, Val} = application:get_env(Key),
-    Val.
+-export([get_key_or_default/3]).
 
 get_key_or_default(_, [], Default) ->
     Default;
