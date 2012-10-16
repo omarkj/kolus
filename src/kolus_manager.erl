@@ -67,7 +67,7 @@ handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[],
 handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[{TimerRef,Socket}|Sockets]=Idle,
 						     active_sockets=Active,tid=Tid,
 						     identifier=Identifier}=State) when length(Idle) > 0 ->
-    erlang:cancel_timer(TimerRef),
+    cancel_timer(TimerRef),
     CallerMonitorRef = erlang:monitor(process, Caller),
     decrement_idle(Tid),
     ActiveSockets0 = add_socket(CallerMonitorRef,Socket, Active),
@@ -129,3 +129,16 @@ return_socket(Socket, {CallerMonitorRef, _}, ActiveSockets, IdleSockets) ->
     TimerRef = erlang:start_timer(kolus_helper:get_env(socket_timeout), self(), close),
     {remove_socket(CallerMonitorRef, ActiveSockets),
      IdleSockets++[{TimerRef, Socket}]}.
+
+cancel_timer(Ref) ->
+    case erlang:cancel_timer(Ref) of
+        false ->
+            %% Flush expired timer message
+            receive
+                {timeout, Ref, _} -> ok
+            after 0 -> ok
+            end;
+        _Time ->
+            %% Timer didn't fire, so no message to worry about
+            ok
+    end
