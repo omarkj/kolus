@@ -1,15 +1,18 @@
 -module(kolus_first_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include("../src/kolus_internal.hrl").
 
 -export([all/0]).
 
 -export([init_per_suite/1,
 	 end_per_suite/1]).
 
--export([no_managers/1]).
+-export([no_managers/1,
+	 get_idle/1]).
 
 all() ->
-    [no_managers].
+    [no_managers,
+     get_idle].
 
 % Setup & teardown
 init_per_suite(Config) ->
@@ -19,7 +22,10 @@ init_per_suite(Config) ->
     % Start a server to connect to
     {Port,Pid} = start_server(),
     % Set required configs
+    Backends = [{{127,0,0,1}, Port},
+		{{127,0,0,1}, 1002}],
     [{open_port, Port},
+     {backends, Backends},
      {server_pid, Pid}|Config].
 
 end_per_suite(Config) ->
@@ -29,8 +35,7 @@ end_per_suite(Config) ->
 % No managers available
 no_managers(Config) ->
     Port = ?config(open_port, Config),
-    Backends = [{{127,0,0,1}, Port},
-		{{127,0,0,1}, 1002}],
+    Backends = ?config(backends, Config),
     [] = kolus:status(Backends),
     {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
     case erlang:port_info(kolus:get_socket(KSocket)) of
@@ -41,8 +46,23 @@ no_managers(Config) ->
     [{{{127,0,0,1},Port},_Pid,[{idle,0},{unused,9}]}] = kolus:status(Backends),
     % Return socket
     ok = kolus:return(KSocket),
-    Status = kolus:status(Backends),
-    % Need to wait for the insert to finish, do it somewhere else?
+    % Need to wait for the insert to finish, do it somewhere else - this is needed
+    % for the test, not in regular usage.
+    timer:sleep(1),
+    [{{{127,0,0,1},Port},_Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    {save_config, [{old_socket,KSocket}]}.
+
+% Get the idle socket created in the test above
+get_idle(Config) ->
+    Backends = ?config(backends, Config),
+    {_, SavedConfig} = ?config(saved_config, Config),
+    OldSocket = proplists:get_value(old_socket, SavedConfig),
+    [{{{127,0,0,1},Port},Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    {socket, KSocket} = kolus:connect(<<"test">>, Pid),
+    true = kolus:get_socket(OldSocket) == kolus:get_socket(KSocket),
+    timer:sleep(1),
+    [{{{127,0,0,1},Port},_Pid,[{idle,0},{unused,9}]}] = kolus:status(Backends),
+    ok = kolus:return(KSocket),
     timer:sleep(1),
     [{{{127,0,0,1},Port},_Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
     Config.

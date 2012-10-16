@@ -42,9 +42,10 @@ connect(Identifier, Pid, Opts) when is_pid(Pid) ->
 	    {socket, #kolus_socket{ref=Ref,
 				   manager=Pid,
 				   socket=Socket}};
-	{socket, _Ref, _Socket} ->
-	    % Got an idle socket use it
-	    throw(not_implemented);
+	{socket, Ref, Socket} ->
+	    {socket, #kolus_socket{ref=Ref,
+				   manager=Pid,
+				   socket=Socket}};
 	rejected ->
 	    % Got rejected
 	    throw(not_implemented)

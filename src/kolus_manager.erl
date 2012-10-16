@@ -31,6 +31,7 @@ get_socket(Pid, Identifier, Caller, Opts) ->
     gen_server:call(Pid, {get, Identifier, Caller}, Timeout).
 
 return_socket(Pid, Ref, Socket) ->
+    ok = gen_tcp:controlling_process(Socket, Pid),
     gen_server:cast(Pid, {return, Ref, Socket}).
 
 init([Identifier, Ip, Port]) ->
@@ -68,6 +69,7 @@ handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[{TimerRef,Soc
     CallerMonitorRef = erlang:monitor(process, Caller),
     decrement_idle(Tid),
     ActiveSockets0 = add_socket(CallerMonitorRef,Socket, Active),
+    ok = gen_tcp:controlling_process(Socket, Caller),
     {reply, {socket, CallerMonitorRef, Socket}, State#state{active_sockets=ActiveSockets0,
 							    idle_sockets=Sockets}};
 handle_call({get, _, _}, _From, State) ->
