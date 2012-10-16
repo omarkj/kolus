@@ -93,7 +93,7 @@ handle_call(_Msg, _From, State) ->
 
 % A socket has timed out, close it and remove
 handle_info({timeout, TimerRef, close}, #state{idle_sockets=Idle,tid=Tid}=State) ->
-    Socket = find_socket(TimerRef, Idle),
+    {_,Socket} = find_socket(TimerRef, Idle),
     ok = close_socket(Socket),
     decrement_idle(Tid),
     increment_unused(Tid),
