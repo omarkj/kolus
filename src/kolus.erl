@@ -64,6 +64,7 @@ connect(Identifier, {Ip, Port}, Opts) ->
 
 -spec return(#kolus_socket{}) -> ok.
 return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}) ->
+    ok = gen_tcp:controlling_process(Socket, Manager),
     kolus_manager:return_socket(Manager, Ref, Socket).
 
 -spec return_unusable(#kolus_socket{}) -> ok.

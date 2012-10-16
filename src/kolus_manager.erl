@@ -35,7 +35,6 @@ get_socket(Pid, Identifier, Caller, Opts) ->
     gen_server:call(Pid, {get, Identifier, Caller}, Timeout).
 
 return_socket(Pid, Ref, Socket) ->
-    ok = gen_tcp:controlling_process(Socket, Pid),
     gen_server:cast(Pid, {return, Ref, Socket}).
 
 return_unusable_socket(Pid, Ref) ->
