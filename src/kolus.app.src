@@ -8,5 +8,9 @@
                   stdlib
                  ]},
   {mod, { kolus_app, []}},
-  {env, []}
+  {env, [{endpoint_connection_limit, 10} %% Max connections per back-end IP/Port
+         ,{connect_timeout, 5000} %% ms
+         ,{socket_idle_timeout, 5000} %% ms
+         ,{manager_idle_timeout, 5000} %% ms
+        ]}
  ]}.
