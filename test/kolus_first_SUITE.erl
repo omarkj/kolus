@@ -20,8 +20,6 @@ all() ->
 % Setup & teardown
 init_per_suite(Config) ->
     ok = start_application(kolus),
-    ok = application:set_env(kolus, socket_limit, 10),
-    ok = application:set_env(kolus, socket_timeout, 10000),
     % Start a server to connect to
     {Port,Pid} = start_server(),
     % Set required configs
