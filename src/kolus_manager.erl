@@ -4,81 +4,86 @@
 -include("kolus_internal.hrl").
 -include("kolus.hrl").
 
--type kolus_socket() :: {reference(), port()}.
-
 -record(state, {ip :: inet:ip_address(),
 		port :: inet:port_number(),
+		identifier :: any(),
 		limit :: pos_integer(),
-		active :: pos_integer(),
-		idle :: pos_integer(),
-		sockets :: [kolus_socket()]|[],
-		managers_tid :: ets:tid()
+		active_sockets=[] :: [{reference(), port()}]|[],
+		idle_sockets=[] :: [{reference(), port()}]|[],
+		tid :: ets:tid(),
+		closed=false::boolean()
 	       }).
 
 % API
--export([start_link/3]).
+-export([start_link/3,
+	 get_socket/4,
+	 return_socket/3]).
 
 %% Callbacks
 -export([init/1, handle_cast/2, handle_call/3,
 	 handle_info/2, terminate/2, code_change/3]).
 
-start_link(Tid, Ip, Port) ->
-    gen_server:start_link(?MODULE, [Tid, Ip, Port]).
+start_link(Identifier, Ip, Port) ->
+    gen_server:start_link(?MODULE, [Identifier, Ip, Port], []).
 
-init([Tid, Ip, Port]) ->
+get_socket(Pid, Identifier, Caller, Opts) ->
+    Timeout = kolus_helper:get_key_or_default(timeout, Opts, 5000),
+    gen_server:call(Pid, {get, Identifier, Caller}, Timeout).
+
+return_socket(Pid, Ref, Socket) ->
+    gen_server:cast(Pid, {return, Ref, Socket}).
+
+init([Identifier, Ip, Port]) ->
+    Tid = ets:new(kolus_managers, [set,protected]),
+    true = gproc:reg(?LOOKUP_PID({Ip, Port}), Tid),
     Limit = kolus_helper:get_env(socket_limit),
-    ets:insert(Tid, {Ip, Port}, #backend{active=0,
-					 idle=0,
-					 limit=Limit,
-					 pid=self()}),
-    {ok, #state{ip=Ip,
-		port=Port,
-		active=0,
-		idle=0,
-		sockets=[],
-		limit=kolus_helpers:get_env(socket_limit),
-		managers_tid=Tid
-	       }, kolus_helper:get_env(socket_timeout)}.
+    ets:insert(Tid, [{idle,0},{unused,Limit}]),
+    {ok, #state{ip=Ip,port=Port,
+		limit=Limit,identifier=Identifier,
+		tid=Tid}, kolus_helper:get_env(socket_timeout)}.
 
-handle_cast({return, CallerMonitorRef, Socket}, #state{sockets=Sockets,
-						       active=Active,
-						       idle=Idle}=State) ->
-    case lists:keyfind(CallerMonitorRef, 1, Sockets) of
-	{CallerMonitorRef, Socket} ->
-	    erlang:demonitor(process, CallerMonitorRef),
-	    SocketTimerRef = erlang:start_timer(kolus_helper:get_env(socket_timeout), self(),
-						timeout),
-	    {noreply, State#state{active=Active-1,
-				  idle=Idle+1,
-				  sockets=Sockets++[{SocketTimerRef, Socket}]}};
-	_ ->
-	    % Someone returned a socket I don't own..
-	    {noreply, State}
-    end;
-	
+handle_cast({return, CallerMonitorRef, Socket}, #state{active_sockets=ActiveSockets,tid=Tid,
+						       idle_sockets=IdleSockets}=State) ->
+    FoundSocket = find_socket(CallerMonitorRef, ActiveSockets),
+    {ActiveSockets0, IdleSockets0} = return_socket(Socket, FoundSocket, ActiveSockets, IdleSockets),
+    increment_idle(Tid),
+    {noreply, State#state{idle_sockets=IdleSockets0, active_sockets=ActiveSockets0}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-% Check if you can create a connection to this backend
-% I'll assume the socket will be created, will add to active and start
-% monitoring the client. Also return that monitoring reference for
-% checkin time.
-handle_call(can_create, _From, #state{active=Active,
-				      idle=Idle,
-				      limit=Limit}=State) when Active+Idle < Limit ->
-    {reply, true, State};
-handle_call(can_create, _From, State) ->
-    {reply, false, State};
-% The caller got permission to create a socket, sending it plus its pid
-% for monitoring
-handle_call({created, Socket, Caller}, _From, #state{sockets=Sockets,active=Active}=State) ->
+% The caller has requested a socket but there are no idle, tell it to create one
+% and return a monitor reference.
+handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[],
+						     ip=Ip,port=Port,tid=Tid,
+						     active_sockets=Active,limit=Limit,
+						     identifier=Identifier}=State) when Limit > length(Active) ->
     CallerMonitorRef = erlang:monitor(process, Caller),
-    {reply, {ok, CallerMonitorRef}, State#state{sockets=Sockets ++ [{CallerMonitorRef, Socket}],
-						active=Active+1}};
+    decrement_unused(Tid),
+    {reply, {create, CallerMonitorRef, Ip, Port}, State#state{active_sockets=add_socket(CallerMonitorRef, undefined, Active)}};
+
+handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[{TimerRef,Socket}|Sockets]=Idle,
+						     active_sockets=Active,tid=Tid,
+						     identifier=Identifier}=State) when length(Idle) > 0 ->
+    erlang:cancel_timer(TimerRef),
+    CallerMonitorRef = erlang:monitor(process, Caller),
+    decrement_idle(Tid),
+    ActiveSockets0 = add_socket(CallerMonitorRef,Socket, Active),
+    {reply, {socket, CallerMonitorRef, Socket}, State#state{active_sockets=ActiveSockets0,
+							    idle_sockets=Sockets}};
+handle_call({get, _, _}, _From, State) ->
+    {reply, rejected, State};
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_info(timeout, #state{sockets=[]}=State) ->
+% A socket has timed out, close it and remove
+handle_info({timeout, TimerRef, close}, #state{idle_sockets=Idle,tid=Tid}=State) ->
+    Socket = find_socket(TimerRef, Idle),
+    ok = close_socket(Socket),
+    decrement_idle(Tid),
+    increment_unused(Tid),
+    {noreply, State#state{idle_sockets=remove_socket(TimerRef, Idle)}};
+
+handle_info(timeout, State) ->
     {stop, normal, State};
     
 handle_info(_Info, State) ->
@@ -89,3 +94,34 @@ terminate(Reason, _State) ->
 
 code_change(_, State, _) ->
     {ok, State}.
+
+% Internal
+increment_idle(Tid) ->
+    ets:update_counter(Tid, idle, 1).
+decrement_idle(Tid) ->
+    ets:update_counter(Tid, idle, -1).
+
+increment_unused(Tid) ->
+    ets:update_counter(Tid, unused, 1).
+decrement_unused(Tid) ->
+    ets:update_counter(Tid, unused, -1).
+    
+close_socket(Socket) ->
+    gen_tcp:close(Socket).
+
+find_socket(MonitorRef, List) ->
+    lists:keyfind(MonitorRef, 1, List).
+
+add_socket(MonitorRef, Socket, List) ->
+    List ++ [{MonitorRef, Socket}].
+
+remove_socket(MonitorRef, List) ->
+    lists:keydelete(MonitorRef, 1, List).
+
+return_socket(_, false, ActiveSockets, IdleSockets) ->
+    {ActiveSockets, IdleSockets};
+return_socket(Socket, {CallerMonitorRef, _}, ActiveSockets, IdleSockets) ->
+    erlang:demonitor(CallerMonitorRef),
+    TimerRef = erlang:start_timer(kolus_helper:get_env(socket_timeout), self(), close),
+    {remove_socket(CallerMonitorRef, ActiveSockets),
+     IdleSockets++[{TimerRef, Socket}]}.

@@ -2,17 +2,22 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/0,
+	 create_manager/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(I, Type, Args), {I, {I, start_link, [Args]}, permanent, 5000, Type, [I]}).
+-define(CHILD(I, Type), {I, {I, start_link, []}, temporary, 5000, Type, [I]}).
 
-start_link(Tid) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [Tid]).
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-init([Tid]) ->
-    Manager = ?CHILD(kolus_manager, worker, [Tid]),
+create_manager(Identifier, Ip, Port) ->
+    {ok, Pid} = supervisor:start_child(?MODULE, [Identifier, Ip, Port]),
+    Pid.
+
+init([]) ->
+    Manager = ?CHILD(kolus_manager, worker),
     {ok, { {simple_one_for_one, 0, 1}, [Manager]} }.

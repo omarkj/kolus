@@ -1,10 +1,9 @@
 {application, kolus,
  [
   {description, ""},
-  {vsn, "1"},
+  {vsn, "0.1"},
   {registered, []},
-  {applications, [
-		  gproc
+  {applications, [gproc,
                   kernel,
                   stdlib
                  ]},

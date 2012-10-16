@@ -7,4 +7,4 @@ compile: get_deps
 	@$(REBAR) compile
 
 test: compile
-	@$(REBAR) ct
+	@$(REBAR) ct skip_deps=true
