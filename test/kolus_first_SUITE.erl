@@ -9,13 +9,15 @@
 
 -export([no_managers/1,
 	 get_idle/1,
-	 return_unusable/1
+	 return_unusable/1,
+	 socket_timeout/1
 	]).
 
 all() ->
     [no_managers
      ,get_idle
-     ,return_unusable].
+     ,return_unusable
+     ,socket_timeout].
 
 % Setup & teardown
 init_per_suite(Config) ->
@@ -78,6 +80,17 @@ return_unusable(Config) ->
     timer:sleep(1),
     [{{{127,0,0,1},Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
     Config.
+
+% A socket times out that's being held by the manager
+socket_timeout(Config) ->
+    Backends = ?config(backends, Config),
+    ok = application:set_env(kolus, socket_idle_timeout, 100),
+    [{{{127,0,0,1},_Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
+    {socket, KSocket} = kolus:connect(<<"test">>, Pid),
+    ok = kolus:return(KSocket),
+    timer:sleep(101),
+    [{{{127,0,0,1},_Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
+    ok.
 
 % Internal
 start_application(App) ->
