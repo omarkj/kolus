@@ -1,0 +1,13 @@
+{application, kolus,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+		  gproc
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { kolus_app, []}},
+  {env, []}
+ ]}.
