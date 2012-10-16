@@ -1,6 +1,6 @@
 {application, kolus,
  [
-  {description, ""},
+  {description, "TCP connection balancing manager"},
   {vsn, "0.1"},
   {registered, []},
   {applications, [gproc,
