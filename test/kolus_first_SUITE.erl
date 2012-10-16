@@ -8,11 +8,14 @@
 	 end_per_suite/1]).
 
 -export([no_managers/1,
-	 get_idle/1]).
+	 get_idle/1,
+	 return_unusable/1
+	]).
 
 all() ->
-    [no_managers,
-     get_idle].
+    [no_managers
+     ,get_idle
+     ,return_unusable].
 
 % Setup & teardown
 init_per_suite(Config) ->
@@ -65,6 +68,17 @@ get_idle(Config) ->
     ok = kolus:return(KSocket),
     timer:sleep(1),
     [{{{127,0,0,1},Port},_Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    Config.
+
+% Return unusable socket
+return_unusable(Config) ->
+    Backends = ?config(backends, Config),
+    [{{{127,0,0,1},Port},Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    {socket, KSocket} = kolus:connect(<<"test">>, Pid),
+    gen_tcp:close(kolus:get_socket(KSocket)),
+    ok = kolus:return_unusable(KSocket),
+    timer:sleep(1),
+    [{{{127,0,0,1},Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
     Config.
 
 % Internal
