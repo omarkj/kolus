@@ -59,11 +59,17 @@ connect(Identifier, #kolus_backend{manager=Pid}, Opts) when is_pid(Pid) ->
 
 -spec return(#kolus_socket{}) -> ok.
 return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}=KSocket) ->
-    case gen_tcp:controlling_process(Socket, Manager) of
-	{error, closed} ->
-	    finished(KSocket);
-	ok ->
-	    kolus_manager:return_socket(Manager, Ref, Socket)
+    case erlang:is_process_alive(Manager) of
+	true ->
+	    case gen_tcp:controlling_process(Socket, Manager) of
+		{error, closed} ->
+		    finished(KSocket);
+		ok ->
+		    kolus_manager:return_socket(Manager, Ref, Socket)
+	    end;
+	_ ->
+	    gen_tcp:close(Socket),
+	    ok
     end.
 
 -spec finished(#kolus_socket{}) -> ok.
