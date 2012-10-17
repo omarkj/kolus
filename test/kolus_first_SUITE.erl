@@ -12,7 +12,8 @@
 	 return_unusable/1,
 	 socket_timeout/1,
 	 manager_timeout/1,
-	 full_manager/1
+	 full_manager/1,
+	 changed_ident/1
 	]).
 
 all() ->
@@ -22,6 +23,7 @@ all() ->
      ,socket_timeout
      ,manager_timeout
      ,full_manager
+     ,changed_ident
     ].
 
 % Setup & teardown
@@ -133,6 +135,13 @@ full_manager(Config) ->
     ok = kolus:return(KSocket),
     {socket, KSocket2} = kolus:connect(<<"test">>, hd(Backends)),
     ok = kolus:return(KSocket2),
+changed_ident(Config) ->
+    Backends = ?config(backends, Config),
+    {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
+    {error, rejected} = kolus:connect(<<"test0">>, hd(Backends)),
+    {socket, KSocket1} = kolus:connect(<<"test">>, hd(Backends)),
+    ok = kolus:return(KSocket),
+    ok = kolus:return(KSocket1),
     Config.
 
 % Internal

@@ -11,8 +11,7 @@
 		active_sockets=[] :: [{reference(), port()}]|[],
 		idle_sockets=[] :: [{reference(), port()}]|[],
 		tid :: ets:tid(),
-		manager_timer :: reference()|undefined,
-		closed=false::boolean()
+		manager_timer :: reference()|undefined
 	       }).
 
 -define(IDLE_TIMEOUT, kolus_app:config(manager_idle_timeout)).
@@ -109,6 +108,10 @@ handle_call({get, Identifier, Caller}, _From,
     {reply, {socket, CallerMonitorRef, Socket}, State#state{active_sockets=ActiveSockets0,
 							    idle_sockets=Sockets,
 							    manager_timer=undefined}};
+handle_call({get, Identifier, _}, _From, #state{identifier=Identifier0}=State) when
+      Identifier /= Identifier0 ->
+    % Not sure what to do here..
+    {reply, rejected, State};
 handle_call({get, _, _}, _From, State) ->
     {reply, rejected, State};
 handle_call(stop, _From, State) ->
