@@ -53,13 +53,13 @@ no_managers(Config) ->
 	    ok
     end,
     % Check unused, should be 9
-    [{{{127,0,0,1},Port},_Pid,[{idle,0},{unused,9}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},Port},_Pid,{idle,0},{unused,9}}] = kolus:status(Backends),
     % Return socket
     ok = kolus:return(KSocket),
     % Need to wait for the insert to finish, do it somewhere else - this is needed
     % for the test, not in regular usage.
     timer:sleep(1),
-    [{{{127,0,0,1},Port},_Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},Port},_Pid,{idle,1},{unused,9}}] = kolus:status(Backends),
     {save_config, [{old_socket,KSocket}]}.
 
 % Get the idle socket created in the test above
@@ -67,36 +67,36 @@ get_idle(Config) ->
     Backends = ?config(backends, Config),
     {_, SavedConfig} = ?config(saved_config, Config),
     OldSocket = proplists:get_value(old_socket, SavedConfig),
-    [{{{127,0,0,1},Port},Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},Port},Pid,{idle,1},{unused,9}}] = kolus:status(Backends),
     {socket, KSocket} = kolus:connect(<<"test">>, Pid),
     true = kolus:get_socket(OldSocket) == kolus:get_socket(KSocket),
     timer:sleep(1),
-    [{{{127,0,0,1},Port},_Pid,[{idle,0},{unused,9}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},Port},_Pid,{idle,0},{unused,9}}] = kolus:status(Backends),
     ok = kolus:return(KSocket),
     timer:sleep(1),
-    [{{{127,0,0,1},Port},_Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},Port},_Pid,{idle,1},{unused,9}}] = kolus:status(Backends),
     Config.
 
 % Return unusable socket
 return_unusable(Config) ->
     Backends = ?config(backends, Config),
-    [{{{127,0,0,1},Port},Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},Port},Pid,{idle,1},{unused,9}}] = kolus:status(Backends),
     {socket, KSocket} = kolus:connect(<<"test">>, Pid),
     gen_tcp:close(kolus:get_socket(KSocket)),
     ok = kolus:finished(KSocket),
     timer:sleep(1),
-    [{{{127,0,0,1},Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},Port},Pid,{idle,0},{unused,10}}] = kolus:status(Backends),
     Config.
 
 % A socket times out that's being held by the manager
 socket_timeout(Config) ->
     Backends = ?config(backends, Config),
     ok = application:set_env(kolus, socket_idle_timeout, 100),
-    [{{{127,0,0,1},_Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},_Port},Pid,{idle,0},{unused,10}}] = kolus:status(Backends),
     {socket, KSocket} = kolus:connect(<<"test">>, Pid),
     ok = kolus:return(KSocket),
     timer:sleep(101),
-    [{{{127,0,0,1},_Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},_Port},Pid,{idle,0},{unused,10}}] = kolus:status(Backends),
     ok = application:set_env(kolus, socket_idle_timeout, 5000),
     Config.
 
@@ -106,7 +106,7 @@ manager_timeout(Config) ->
     ok = application:set_env(kolus, socket_idle_timeout, 100),
     ok = application:set_env(kolus, manager_idle_timeout, 100),
     % Start by shutting down the current manager
-    [{{{127,0,0,1},_Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},_Port},Pid,{idle,0},{unused,10}}] = kolus:status(Backends),
     ok = kolus_manager:stop_sync(Pid),
     [] = kolus:status(Backends),
     {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
@@ -130,7 +130,7 @@ full_manager(Config) ->
     ok = application:set_env(kolus, endpoint_connection_limit, 2),
     {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
     {socket, KSocket1} = kolus:connect(<<"test">>, hd(Backends)),
-    [{{{127,0,0,1},_Port},_Pid,[{idle,0},{unused,0}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},_Port},_Pid,{idle,0},{unused,0}}] = kolus:status(Backends),
     {error, rejected} = kolus:connect(<<"test">>, hd(Backends)),
     ok = kolus:return(KSocket),
     {socket, KSocket2} = kolus:connect(<<"test">>, hd(Backends)),
