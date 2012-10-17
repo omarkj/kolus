@@ -15,6 +15,7 @@
 	 manager_timeout/1,
 	 full_manager/1,
 	 changed_ident/1,
+	 crashing_manager/1,
 	 fill_first/1
 	]).
 
@@ -26,6 +27,7 @@ all() ->
      ,manager_timeout
      ,full_manager
      ,changed_ident
+     ,crashing_manager
      ,fill_first
     ].
 
@@ -135,6 +137,25 @@ manager_timeout(Config) ->
     false = erlang:is_process_alive(MngrPid),
     ok = application:set_env(kolus, socket_idle_timeout, 5000),
     ok = application:set_env(kolus, manager_idle_timeout, 5000),
+    Config.
+
+% Crashing manager and returning to a dead manager
+crashing_manager(Config) ->
+    Backends = ?config(backends, Config),
+    [Backend0,Backend1] = kolus:status(Backends),
+    {socket, KSocket0} = kolus:connect(<<"test">>, Backend0),
+    {socket, KSocket1} = kolus:connect(<<"test">>, Backend1),
+    MngrPid0 = kolus:get_manager(KSocket0),
+    MngrPid1 = kolus:get_manager(KSocket1),
+    [true,true] = lists:map(fun(MngrPid) ->
+				    erlang:is_process_alive(MngrPid)
+			    end, [MngrPid0,MngrPid1]),
+    erlang:exit(MngrPid0, kill),
+    [false,true] = lists:map(fun(MngrPid) ->
+				     erlang:is_process_alive(MngrPid)
+			    end, [MngrPid0,MngrPid1]),
+    kolus:return(KSocket0),
+    kolus:return(KSocket1),
     Config.
 
 % Full manager
