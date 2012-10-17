@@ -20,6 +20,9 @@
 -type backend_status() :: {backend(), pid(), [backend_info()]}.
 -type connect_opts() :: {timeout, pos_integer()}.
 
+-export_type([backend/0,backend_info/0,
+	      backend_status/0]).
+
 -spec get_socket(kolus_socket()) -> port().
 get_socket(#kolus_socket{socket=Socket}) ->
     Socket.
