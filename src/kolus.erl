@@ -61,11 +61,17 @@ connect(Identifier, #kolus_backend{manager=Pid}, Opts) when is_pid(Pid) ->
 return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}=KSocket) ->
     case erlang:is_process_alive(Manager) of
 	true ->
-	    case gen_tcp:controlling_process(Socket, Manager) of
+	    try gen_tcp:controlling_process(Socket, Manager) of
 		{error, closed} ->
 		    finished(KSocket);
 		ok ->
 		    kolus_manager:return_socket(Manager, Ref, Socket)
+	    catch
+		error:function_clause ->
+		    % An error came up returning the socket - the most likely
+		    % reason is that the remote of the socket is refusing connections
+		    % but the socket is in active false. Mark it as dead.
+		    finished(KSocket)
 	    end;
 	_ ->
 	    gen_tcp:close(Socket),
