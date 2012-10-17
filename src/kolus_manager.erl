@@ -48,6 +48,7 @@ return_unusable_socket(Pid, Ref) ->
 
 init([Identifier, Ip, Port]) ->
     Limit = kolus_app:config(endpoint_connection_limit),
+    true = gproc:reg(?LOOKUP_PID({Ip, Port})),
     true = gproc:reg(?IDLE_KEY({Ip, Port}), 0),
     true = gproc:reg(?UNUSED_KEY({Ip, Port}), Limit),
     {ok, #state{ip=Ip,port=Port,
