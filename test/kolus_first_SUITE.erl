@@ -130,11 +130,14 @@ full_manager(Config) ->
     ok = application:set_env(kolus, endpoint_connection_limit, 2),
     {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
     {socket, KSocket1} = kolus:connect(<<"test">>, hd(Backends)),
-    [{{{127,0,0,1},_Port},Pid,[{idle,0},{unused,0}]}] = kolus:status(Backends),
+    [{{{127,0,0,1},_Port},_Pid,[{idle,0},{unused,0}]}] = kolus:status(Backends),
     {error, rejected} = kolus:connect(<<"test">>, hd(Backends)),
     ok = kolus:return(KSocket),
     {socket, KSocket2} = kolus:connect(<<"test">>, hd(Backends)),
     ok = kolus:return(KSocket2),
+    ok = kolus:return(KSocket1),
+    Config.
+
 changed_ident(Config) ->
     Backends = ?config(backends, Config),
     {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
