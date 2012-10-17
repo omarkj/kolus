@@ -41,7 +41,7 @@ connect(Opaque, Backend) ->
     connect(Opaque, Backend, []).
 
 -spec connect(any(), pid()|backend(), [connect_opts()]) ->
-		     {ok, kolus_socket()}.
+		     {ok, kolus_socket()}|{error, rejected}.
 connect(Identifier, Pid, Opts) when is_pid(Pid) ->
     Caller = kolus_helper:get_key_or_default(caller, Opts, self()),
     case kolus_manager:get_socket(Pid, Identifier, Caller, Opts) of
