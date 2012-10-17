@@ -11,7 +11,8 @@
 	 get_idle/1,
 	 return_unusable/1,
 	 socket_timeout/1,
-	 manager_timeout/1
+	 manager_timeout/1,
+	 full_manager/1
 	]).
 
 all() ->
@@ -19,7 +20,9 @@ all() ->
      ,get_idle
      ,return_unusable
      ,socket_timeout
-     ,manager_timeout].
+     ,manager_timeout
+     ,full_manager
+    ].
 
 % Setup & teardown
 init_per_suite(Config) ->
@@ -117,6 +120,19 @@ manager_timeout(Config) ->
     false = erlang:is_process_alive(MngrPid),
     ok = application:set_env(kolus, socket_idle_timeout, 5000),
     ok = application:set_env(kolus, manager_idle_timeout, 5000),
+    Config.
+
+% Full manager
+full_manager(Config) ->
+    Backends = ?config(backends, Config),
+    ok = application:set_env(kolus, endpoint_connection_limit, 2),
+    {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
+    {socket, KSocket1} = kolus:connect(<<"test">>, hd(Backends)),
+    [{{{127,0,0,1},_Port},Pid,[{idle,0},{unused,0}]}] = kolus:status(Backends),
+    {error, rejected} = kolus:connect(<<"test">>, hd(Backends)),
+    ok = kolus:return(KSocket),
+    {socket, KSocket2} = kolus:connect(<<"test">>, hd(Backends)),
+    ok = kolus:return(KSocket2),
     Config.
 
 % Internal
