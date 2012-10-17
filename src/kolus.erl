@@ -72,13 +72,10 @@ finished(#kolus_socket{manager=Manager,ref=Ref}) ->
 
 % Internal
 connect_(Identifier, {Ip, Port}, Opts) ->
-    case gproc:lookup_pids(?LOOKUP_PID({Ip,Port})) of
-	[Pid] ->
-	    % Someone beat us to creating a manager
+    case kolus_manager:start_link(Identifier, Ip, Port) of
+	{ok, Pid} ->
 	    connect_(Identifier, Pid, Opts);
-	[] ->
-	    % Lets create a manager
-	    Pid = kolus_director:create_manager(Identifier, Ip, Port),
+	{error, {already_started, Pid}} ->
 	    connect_(Identifier, Pid, Opts)
     end;
 connect_(Identifier, Pid, Opts) ->
