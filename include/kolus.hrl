@@ -1,3 +1,7 @@
--record(backend, {active=0 :: pos_integer(),
-		  idle=0 :: pos_integer(),
-		  limit :: pos_integer()}).
+-record(kolus_backend, {ip :: inet:ip_address(),
+			port :: inet:port_number(),
+			idle :: pos_integer()|undefined,
+			unused :: pos_integer()|undefined,
+			manager :: pid()|undefined,
+			manager_status :: ets:tid()|undefined
+		       }).
