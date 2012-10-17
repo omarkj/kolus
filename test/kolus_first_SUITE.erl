@@ -76,7 +76,7 @@ return_unusable(Config) ->
     [{{{127,0,0,1},Port},Pid,[{idle,1},{unused,9}]}] = kolus:status(Backends),
     {socket, KSocket} = kolus:connect(<<"test">>, Pid),
     gen_tcp:close(kolus:get_socket(KSocket)),
-    ok = kolus:return_unusable(KSocket),
+    ok = kolus:finished(KSocket),
     timer:sleep(1),
     [{{{127,0,0,1},Port},Pid,[{idle,0},{unused,10}]}] = kolus:status(Backends),
     Config.
