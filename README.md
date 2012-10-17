@@ -36,15 +36,29 @@ can change fast, and is considered outdated by `kolus` as soon as the
 caller has it.
 
 ``` erlang
-    [backend_status()]|[] = kolus:status([backend()])
+[kolus_backend()]|[] = kolus:status([backend()|kolus_backend()]|[])
 ```
 
 ### Types:
 
 ``` erlang
-    backend() :: {inet:ip_address(), inet:port_number()}
-    backend_status :: {backend(), pid(), [backend_info()]}.
+backend() :: {inet:ip_address(), inet:port_number()}.
+kolus_backend() :: #kolus_backend{}.
 ```
+
+The `#kolus_backend{}` record can be used to match on idle TCP or 
+unused TCP connections:
+
+``` erlang
+#kolus_backend{ ip :: inet:ip_address(),
+	      	port :: inet:port_number(),
+	        idle :: pos_integer()|undefined,
+	       	unused :: pos_integer()|undefined}.
+```
+
+The `idle` and `unused` fields will be `undefined` if the manager has
+not been started or has not been looked up. Do not change values of the
+`kolus_backend{}`.
 
 ## Connecting
 
@@ -59,13 +73,11 @@ through the same manager (for example, when a specific Ident is no longer
 served via a socket).
 
 ``` erlang
-    {socket, kolus_socket()} = kolus:connect(Ident::any(), backend()|pid()),
+{socket, kolus_socket()} = kolus:connect(Ident::any(), backend()|
+						       kolus_backend()),
 ```
 
-If you send in a `pid()` but not a `backend()` it will be treated as a
-manager.
-
-The kolus_socket() is an opaque type.
+The `kolus_socket()` is an opaque type.
 
 ## Returning a socket
 
@@ -73,7 +85,7 @@ Return a socket the caller is done using. The socket will be added back to
 the manager and made available to other callers.
 
 ``` erlang
-    ok = kolus:return(kolus_socket())
+ok = kolus:return(kolus_socket())
 ```
 
 ## Returning a closed socket
@@ -83,7 +95,7 @@ returned using the following function. The socket will be removed from
 the managers list.
 
 ``` erlang
-    ok = kolus:finished(kolus_socket())
+ok = kolus:finished(kolus_socket())
 ```
 
 ## Using the `kolus_socket()`
@@ -94,14 +106,40 @@ directly to it.
 ### Getting the actual socket
 
 ``` erlang
-   port() = kolus:get_socket(kolus_socket())
+port() = kolus:get_socket(kolus_socket())
 ```  
 
 ### Getting the manager behind the `kolus_socket()`
 
 ``` erlang
-    pid() = kolus:get_manager(kolus_socket())
+pid() = kolus:get_manager(kolus_socket())
 ```  
+
+## Select
+
+You can specify a search function that's run on the list of backends,
+this function should return the backend the caller wants to use.
+
+### Very simple "fill first" loadbalancing
+
+``` erlang
+fill_first(Backends) ->
+	hd(lists:sort(fun(#kolus_backend{idle=A,unused=X},
+			   #kolus_backend{idle=B,unused=Y}) ->
+			      case A > B of
+				  true ->
+				      true;
+				  false ->
+				      case X of
+					  0 ->
+					      false;
+					  _ ->
+					      X =< Y
+				      end
+			      end
+		      end, Backends)).
+{socket, Socket} = kolus:select(<<"test">>, Backends, fun ff_filter/1).
+```
 
 License
 -------
