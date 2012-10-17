@@ -96,7 +96,8 @@ check_backends([Backend|Backends], Res) ->
 get_status(_,[]) ->
     [];
 get_status(Backend,[{Pid, Tid}]) ->
-    [{Backend, Pid,ets:tab2list(Tid)}].
+    [Idle,Unused] = ets:tab2list(Tid),
+    [{Backend, Pid, Idle, Unused}].
 
 create_connection(Ip, Port) ->
     case gen_tcp:connect(Ip, Port, [{active, false}]) of
