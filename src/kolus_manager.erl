@@ -10,7 +10,6 @@
 		limit :: pos_integer(),
 		active_sockets=[] :: [{reference(), port()}]|[],
 		idle_sockets=[] :: [{reference(), port()}]|[],
-		tid :: ets:tid(),
 		manager_timer :: reference()|undefined
 	       }).
 
@@ -48,31 +47,30 @@ return_unusable_socket(Pid, Ref) ->
     gen_server:cast(Pid, {return_unusable, Ref}).
 
 init([Identifier, Ip, Port]) ->
-    Tid = ets:new(kolus_managers, [set,protected,{read_concurrency,true}]),
-    true = gproc:reg(?LOOKUP_PID({Ip, Port}), Tid),
     Limit = kolus_app:config(endpoint_connection_limit),
-    ets:insert(Tid, [{idle,0},{unused,Limit}]),
+    true = gproc:reg(?IDLE_KEY({Ip, Port}), 0),
+    true = gproc:reg(?UNUSED_KEY({Ip, Port}), Limit),
     {ok, #state{ip=Ip,port=Port,
 		limit=Limit,identifier=Identifier,
-		manager_timer=maybe_set_timer([], []),
-		tid=Tid}}.
+		manager_timer=maybe_set_timer([], [])}}.
 
-handle_cast({return, CallerMonitorRef, Socket}, #state{active_sockets=ActiveSockets,tid=Tid,
+handle_cast({return, CallerMonitorRef, Socket}, #state{active_sockets=ActiveSockets,
+						       ip=Ip,port=Port,
 						       idle_sockets=IdleSockets,
 						       manager_timer=MngrTimer}=State) ->
     FoundSocket = find_socket(CallerMonitorRef, ActiveSockets),
     {ActiveSockets0, IdleSockets0} = return_socket(Socket, FoundSocket, ActiveSockets, IdleSockets),
-    increment_idle(Tid),
+    increment_idle(Ip,Port),
     cancel_timer(MngrTimer),
     {noreply, State#state{idle_sockets=IdleSockets0, active_sockets=ActiveSockets0,
 			  manager_timer=undefined}};
 handle_cast({return_unusable, CallerMonitorRef}, #state{active_sockets=ActiveSockets,
 							idle_sockets=IdleSockets,
 							manager_timer=Ref,
-							tid=Tid}=State) ->
+							ip=Ip,port=Port}=State) ->
     FoundSocket = find_socket(CallerMonitorRef, ActiveSockets),
     ActiveSockets0 = remove_dead_socket(FoundSocket, ActiveSockets),
-    increment_unused(Tid),
+    increment_unused(Ip,Port),
     cancel_timer(Ref),
     {noreply, State#state{active_sockets=ActiveSockets0,
 			  manager_timer=maybe_set_timer(ActiveSockets0,IdleSockets)}};
@@ -83,12 +81,12 @@ handle_cast(_Msg, State) ->
 % The caller has requested a socket but there are no idle, tell it to create one
 % and return a monitor reference.
 handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[],
-						     ip=Ip,port=Port,tid=Tid,
+						     ip=Ip,port=Port,
 						     active_sockets=Active,limit=Limit,
 						     manager_timer=Ref,
 						     identifier=Identifier}=State) when Limit > length(Active) ->
     CallerMonitorRef = erlang:monitor(process, Caller),
-    decrement_unused(Tid),
+    decrement_unused(Ip,Port),
     ActiveSockets0 = add_socket(CallerMonitorRef, undefined, Active),
     cancel_timer(Ref),
     {reply, {create, CallerMonitorRef, Ip, Port}, State#state{active_sockets=ActiveSockets0,
@@ -96,12 +94,12 @@ handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[],
 
 handle_call({get, Identifier, Caller}, _From,
             #state{idle_sockets = [{TimerRef, Socket} | Sockets],
-                   active_sockets = Active, tid = Tid,
+                   active_sockets = Active, ip=Ip,port=Port,
 		   manager_timer = ManagerTimerRef,
                    identifier = Identifier} = State) ->
     cancel_timer(TimerRef),
     CallerMonitorRef = erlang:monitor(process, Caller),
-    decrement_idle(Tid),
+    decrement_idle(Ip,Port),
     ActiveSockets0 = add_socket(CallerMonitorRef,Socket, Active),
     ok = gen_tcp:controlling_process(Socket, Caller),
     cancel_timer(ManagerTimerRef),
@@ -122,12 +120,12 @@ handle_call(_Msg, _From, State) ->
 % A socket has timed out, close it and remove
 handle_info({timeout, TimerRef, close}, #state{idle_sockets=Idle,
 					       active_sockets=Active,
-					       manager_timer = Ref,
-					       tid=Tid}=State) ->
+					       ip=Ip,port=Port,
+					       manager_timer = Ref}=State) ->
     {_,Socket} = find_socket(TimerRef, Idle),
     ok = close_socket(Socket),
-    decrement_idle(Tid),
-    increment_unused(Tid),
+    decrement_idle(Ip,Port),
+    increment_unused(Ip,Port),
     cancel_timer(Ref),
     Idle0 = remove_socket(TimerRef, Idle),
     Ref0 = maybe_set_timer(Idle0, Active),
@@ -152,15 +150,15 @@ code_change(_, State, _) ->
     {ok, State}.
 
 % Internal
-increment_idle(Tid) ->
-    ets:update_counter(Tid, idle, 1).
-decrement_idle(Tid) ->
-    ets:update_counter(Tid, idle, -1).
+increment_idle(Ip,Port) ->
+    gproc:update_counter(?IDLE_KEY({Ip,Port}), 1).
+decrement_idle(Ip,Port) ->
+    gproc:update_counter(?IDLE_KEY({Ip,Port}), -1).
 
-increment_unused(Tid) ->
-    ets:update_counter(Tid, unused, 1).
-decrement_unused(Tid) ->
-    ets:update_counter(Tid, unused, -1).
+increment_unused(Ip,Port) ->
+    gproc:update_counter(?UNUSED_KEY({Ip,Port}), 1).
+decrement_unused(Ip,Port) ->
+    gproc:update_counter(?UNUSED_KEY({Ip,Port}), -1).
 
 close_socket(Socket) ->
     gen_tcp:close(Socket).
