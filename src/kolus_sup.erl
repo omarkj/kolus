@@ -15,5 +15,4 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    Director = ?CHILD(kolus_director, worker),
-    {ok, { {one_for_one, 5, 10}, [Director]} }.
+    {ok, { {one_for_one, 5, 10}, []} }.
