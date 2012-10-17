@@ -54,7 +54,7 @@ connect(Identifier, Pid, Opts) when is_pid(Pid) ->
 				   socket=Socket}};
 	rejected ->
 	    % Got rejected
-	    throw(not_implemented)
+	    {error, rejected}
     end;
 connect(Identifier, {Ip, Port}, Opts) ->
     case gproc:lookup_pids(?LOOKUP_PID({Ip,Port})) of
