@@ -140,7 +140,6 @@ handle_info({timeout, TimerRef, mngr_timeout}, #state{manager_timer = TimerRef}=
     {noreply, State#state{manager_timer=undefined}};
 
 handle_info(_Info, State) ->
-    error_logger:info_msg("Hi my name is ~p", [_Info]),
     {noreply, State}.
 
 terminate(Reason, _State) ->
