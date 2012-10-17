@@ -141,6 +141,7 @@ full_manager(Config) ->
     ok = application:set_env(kolus, endpoint_connection_limit, 10),
     Config.
 
+% Dealing with different incoming connection idents
 changed_ident(Config) ->
     Backends = ?config(backends, Config),
     {socket, KSocket} = kolus:connect(<<"test">>, hd(Backends)),
