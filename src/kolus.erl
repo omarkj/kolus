@@ -14,10 +14,10 @@
 		       socket :: port(),
 		       manager :: pid()}).
 
--type kolus_socket() :: #kolus_socket{}.
+-opaque kolus_socket() :: #kolus_socket{}.
 -type backend() :: {inet:ip_address(), inet:port_number()}.
 -type backend_info() :: {limit, pos_integer()}|{idle, pos_integer()}.
--type backend_status() :: {backend(), pid()|undefined, [backend_info()]}.
+-type backend_status() :: {backend(), pid(), [backend_info()]}.
 -type connect_opts() :: {timeout, pos_integer()}.
 
 -spec get_socket(kolus_socket()) -> port().
