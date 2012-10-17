@@ -13,7 +13,8 @@
 	 socket_timeout/1,
 	 manager_timeout/1,
 	 full_manager/1,
-	 changed_ident/1
+	 changed_ident/1,
+	 fill_first/1
 	]).
 
 all() ->
@@ -24,6 +25,7 @@ all() ->
      ,manager_timeout
      ,full_manager
      ,changed_ident
+     ,fill_first
     ].
 
 % Setup & teardown
@@ -147,7 +149,74 @@ changed_ident(Config) ->
     ok = kolus:return(KSocket1),
     Config.
 
+% Very simple fill first algo
+fill_first(Config) ->
+    % Start by creating a few servers
+    {Port0,_P1} = start_server(),
+    {Port1,_P2} = start_server(),
+    {Port2,_P3} = start_server(),
+    L = {127,0,0,1},
+    B0 = {L, Port0},
+    B1 = {L, Port1},
+    B2 = {L, Port2},
+    Backends = [B0,B1,B2],
+    % No backends exist
+    [] = kolus:status(Backends),
+    % To make this test slighty more annoying I'm going to connect
+    % to a few sockets on all the backends. This distribution means
+    % that B0 should be filled up first, then B1, then B2.
+    {socket, _} = kolus:connect(<<"test">>, B1),
+    {socket, _} = kolus:connect(<<"test">>, B1),
+    {socket, _} = kolus:connect(<<"test">>, B2),
+    {socket, _} = kolus:connect(<<"test">>, B0),
+    {socket, _} = kolus:connect(<<"test">>, B0),
+    {socket, _} = kolus:connect(<<"test">>, B0),
+    % Start by checking the status of all the managers
+    [{{{127,0,0,1},Port0},_,{idle,0},{unused,A}},
+     {{{127,0,0,1},Port1},_,{idle,0},{unused,B}},
+     {{{127,0,0,1},Port2},_,{idle,0},{unused,C}}] = kolus:status(Backends),
+    % Fill up the sockets. This is going on on a single process and does take
+    % a while.
+    ok = fill_backend(Backends, A),
+    [{{{127,0,0,1},Port0},_,{idle,0},{unused,0}},
+     {{{127,0,0,1},Port1},_,{idle,0},{unused,B}},
+     {{{127,0,0,1},Port2},_,{idle,0},{unused,C}}] = kolus:status(Backends),
+    ok = fill_backend(Backends, B),
+    [{{{127,0,0,1},Port0},_,{idle,0},{unused,0}},
+     {{{127,0,0,1},Port1},_,{idle,0},{unused,0}},
+     {{{127,0,0,1},Port2},_,{idle,0},{unused,C}}] = kolus:status(Backends),
+    ok = fill_backend(Backends, C),
+    [{{{127,0,0,1},Port0},_,{idle,0},{unused,0}},
+     {{{127,0,0,1},Port1},_,{idle,0},{unused,0}},
+     {{{127,0,0,1},Port2},_,{idle,0},{unused,0}}] = kolus:status(Backends),
+    Config.
+
 % Internal
+fill_backend(_, 0) ->
+    ok;
+fill_backend(Backends, Runs) ->
+    kolus:select(<<"test">>, Backends, fun ff_filter/1),
+    fill_backend(Backends, Runs-1).
+
+ff_filter(Backends) ->
+    {Backend,_,_,_} = 
+	hd(lists:sort(fun
+			  ({_,_,{idle,A},{unused,X}},
+			   {_,_,{idle,B},{unused,Y}}) ->
+			      case A > B of
+				  true ->
+				      true;
+				  false ->
+				      case X of
+					  0 ->
+					      false;
+					  _ ->
+					      X =< Y
+				      end
+			      end
+		      end, Backends)),
+    Backend.
+
 start_application(App) ->
     case application:start(App) of
 	ok ->
