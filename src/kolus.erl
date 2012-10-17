@@ -17,12 +17,11 @@
 
 -opaque kolus_socket() :: #kolus_socket{}.
 -type backend() :: {inet:ip_address(), inet:port_number()}.
--type backend_info() :: {limit, pos_integer()}|{idle, pos_integer()}.
--type backend_status() :: {backend(), pid(), [backend_info()]}.
--type connect_opts() :: {timeout, pos_integer()}.
+-type kolus_backend() :: #kolus_backend{}.
+-type kolus_connect_opts() :: {caller, pid()}.
 
--export_type([backend/0,backend_info/0,
-	      backend_status/0]).
+-export_type([backend/0,
+	      kolus_backend/0]).
 
 -spec get_socket(kolus_socket()) -> port().
 get_socket(#kolus_socket{socket=Socket}) ->
@@ -32,49 +31,31 @@ get_socket(#kolus_socket{socket=Socket}) ->
 get_manager(#kolus_socket{manager=Manager}) ->
     Manager.
 
--spec status([backend()]) -> [backend_status()]|[].
+-spec status([backend()|kolus_backend()]|[]) ->
+		    [kolus_backend()]|[].
 status(Backends) ->
     check_backends(Backends).
 
--spec select(any(), [backend()], function()) -> {socket, kolus_socket()}|
-						{error, rejected}.
+-spec select(any(), [kolus_backend()], function()) -> {socket, kolus_socket()}|
+						      {error, rejected}.
 select(Opaque, Backends, SelectFun) ->
     connect(Opaque, SelectFun(check_backends(Backends))).
 
--spec connect(any(), pid()|backend()) ->
+-spec connect(any(), backend()|kolus_backend()) ->
 		     {ok, kolus_socket()}.
 connect(Opaque, Backend) ->
     connect(Opaque, Backend, []).
 
--spec connect(any(), pid()|backend(), [connect_opts()]) ->
+-spec connect(any(), backend()|kolus_backend(), [kolus_connect_opts()]|[]) ->
 		     {ok, kolus_socket()}|{error, rejected}.
-connect(Identifier, Pid, Opts) when is_pid(Pid) ->
-    Caller = kolus_helper:get_key_or_default(caller, Opts, self()),
-    case kolus_manager:get_socket(Pid, Identifier, Caller, Opts) of
-	{create, Ref, Ip, Port} ->
-	    % No idle socket, create a new one
-	    Socket = create_connection(Ip, Port),
-	    {socket, #kolus_socket{ref=Ref,
-				   manager=Pid,
-				   socket=Socket}};
-	{socket, Ref, Socket} ->
-	    {socket, #kolus_socket{ref=Ref,
-				   manager=Pid,
-				   socket=Socket}};
-	rejected ->
-	    % Got rejected
-	    {error, rejected}
-    end;
-connect(Identifier, {Ip, Port}, Opts) ->
-    case gproc:lookup_pids(?LOOKUP_PID({Ip,Port})) of
-	[Pid] ->
-	    % Someone beat us to creating a manager
-	    connect(Identifier, Pid, Opts);
-	[] ->
-	    % Lets create a manager
-	    Pid = kolus_director:create_manager(Identifier, Ip, Port),
-	    connect(Identifier, Pid, Opts)
-    end.
+connect(Identifier, {_, _}=IpPort, Opts) ->
+    connect_(Identifier, IpPort, Opts);
+connect(Identifier, #kolus_backend{manager=undefined,
+				   ip=Ip,
+				   port=Port}, Opts) ->
+    connect_(Identifier, {Ip, Port}, Opts);
+connect(Identifier, #kolus_backend{manager=Pid}, Opts) when is_pid(Pid) ->
+    connect_(Identifier, Pid, Opts).
 
 -spec return(#kolus_socket{}) -> ok.
 return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}=KSocket) ->
@@ -90,21 +71,81 @@ finished(#kolus_socket{manager=Manager,ref=Ref}) ->
     kolus_manager:return_unusable_socket(Manager, Ref).
 
 % Internal
+connect_(Identifier, {Ip, Port}, Opts) ->
+    case gproc:lookup_pids(?LOOKUP_PID({Ip,Port})) of
+	[Pid] ->
+	    % Someone beat us to creating a manager
+	    connect_(Identifier, Pid, Opts);
+	[] ->
+	    % Lets create a manager
+	    Pid = kolus_director:create_manager(Identifier, Ip, Port),
+	    connect_(Identifier, Pid, Opts)
+    end;
+connect_(Identifier, Pid, Opts) ->
+    Caller = kolus_helper:get_key_or_default(caller, Opts, self()),
+    case kolus_manager:get_socket(Pid, Identifier, Caller, Opts) of
+	{create, Ref, Ip, Port} ->
+	    % No idle socket, create a new one
+	    Socket = create_connection(Ip, Port),
+	    {socket, #kolus_socket{ref=Ref,
+				   manager=Pid,
+				   socket=Socket}};
+	{socket, Ref, Socket} ->
+	    {socket, #kolus_socket{ref=Ref,
+				   manager=Pid,
+				   socket=Socket}};
+	rejected ->
+	    % Got rejected
+	    {error, rejected}
+    end.
+
 check_backends(Backends) ->
     check_backends(Backends, []).
 
 check_backends([], Res) ->
     Res;
 check_backends([Backend|Backends], Res) ->
-    Status = get_status(Backend, gproc:lookup_values(?LOOKUP_PID(Backend))),
-    check_backends(Backends, Res ++ Status).
+    check_backends(Backends, Res ++ [check_backend(Backend)]).
 
-get_status(_,[]) ->
-    [];
-get_status(Backend,[{Pid, Tid}]) ->
-    [Idle,Unused] = ets:tab2list(Tid),
-    [{Backend, Pid, Idle, Unused}].
+check_backend(#kolus_backend{manager=undefined,
+			       ip=Ip,port=Port}) ->
+    case gproc:lookup_value(?LOOKUP_PID({Ip, Port})) of
+	[] ->
+	    #kolus_backend{ip=Ip,port=Port};
+	[{Pid,Tid}] ->
+	    check_backend(Ip, Port, Pid, Tid)
+    end;
+check_backend(#kolus_backend{manager=Pid,manager_status=Tid,
+			       ip=Ip,port=Port}) ->
+    case erlang:is_process_alive(Pid) of
+	true ->
+	    check_backend(Ip, Port, Pid, Tid);
+	false ->
+	    #kolus_backend{ip=Ip,port=Port}
+    end;
+check_backend({Ip,Port}=Backend) ->
+    case gproc:lookup_values(?LOOKUP_PID(Backend)) of
+	[] ->
+	    #kolus_backend{ip=Ip,
+			   port=Port};
+	[{Pid, Tid}] ->
+	    [{idle,Idle}, {unused,Unused}] = ets:tab2list(Tid),
+	    #kolus_backend{ip=Ip,
+			   port=Port,
+			   idle=Idle,
+			   unused=Unused,
+			   manager=Pid,
+			   manager_status=Tid}
+    end.
 
+check_backend(Ip, Port, Pid, Tid) ->
+    [{idle,Idle}, {unused,Unused}] = ets:tab2list(Tid),
+    #kolus_backend{ip=Ip,
+		   port=Port,
+		   manager=Pid,
+		   idle=Idle,
+		   unused=Unused}.
+    
 create_connection(Ip, Port) ->
     case gen_tcp:connect(Ip, Port, [{active, false}]) of
 	{ok, Socket} ->
