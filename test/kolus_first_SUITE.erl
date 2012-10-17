@@ -115,6 +115,8 @@ manager_timeout(Config) ->
     ok = kolus:return(KSocket),
     timer:sleep(250),
     false = erlang:is_process_alive(MngrPid),
+    ok = application:set_env(kolus, socket_idle_timeout, 5000),
+    ok = application:set_env(kolus, manager_idle_timeout, 5000),
     Config.
 
 % Internal
