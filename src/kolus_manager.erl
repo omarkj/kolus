@@ -146,6 +146,8 @@ return_socket(Socket, {CallerMonitorRef, _}, ActiveSockets, IdleSockets) ->
     {remove_socket(CallerMonitorRef, ActiveSockets),
      IdleSockets++[{TimerRef, Socket}]}.
 
+cancel_timer(undefined) ->
+    ok;
 cancel_timer(Ref) ->
     case erlang:cancel_timer(Ref) of
         false ->
