@@ -1,6 +1,7 @@
 -module(kolus).
 
 -export([status/1,
+	 select/3,
 	 connect/2,
 	 return/1,
 	 finished/1,
@@ -34,6 +35,11 @@ get_manager(#kolus_socket{manager=Manager}) ->
 -spec status([backend()]) -> [backend_status()]|[].
 status(Backends) ->
     check_backends(Backends).
+
+-spec select(any(), [backend()], function()) -> {socket, kolus_socket()}|
+						{error, rejected}.
+select(Opaque, Backends, SelectFun) ->
+    connect(Opaque, SelectFun(check_backends(Backends))).
 
 -spec connect(any(), pid()|backend()) ->
 		     {ok, kolus_socket()}.
