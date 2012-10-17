@@ -48,7 +48,7 @@ return_unusable_socket(Pid, Ref) ->
     gen_server:cast(Pid, {return_unusable, Ref}).
 
 init([Identifier, Ip, Port]) ->
-    Tid = ets:new(kolus_managers, [set,protected]),
+    Tid = ets:new(kolus_managers, [set,protected,{read_concurrency,true}]),
     true = gproc:reg(?LOOKUP_PID({Ip, Port}), Tid),
     Limit = kolus_app:config(endpoint_connection_limit),
     ets:insert(Tid, [{idle,0},{unused,Limit}]),
