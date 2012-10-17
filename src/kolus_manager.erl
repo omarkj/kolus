@@ -29,7 +29,8 @@
 	 handle_info/2, terminate/2, code_change/3]).
 
 start_link(Identifier, Ip, Port) ->
-    gen_server:start_link(?MODULE, [Identifier, Ip, Port], []).
+    gen_server:start({via, gproc, ?MANAGER_KEY(Ip,Port)},
+		     ?MODULE, [Identifier, Ip, Port], []).
 
 % Adding this like this since I'll be removing the supervisor soon enough,
 % don't see why you'd want to stop them (it's here for testing).
@@ -48,6 +49,7 @@ return_unusable_socket(Pid, Ref) ->
     gen_server:cast(Pid, {return_unusable, Ref}).
 
 init([Identifier, Ip, Port]) ->
+    true = link(whereis(kolus_sup)),
     Tid = ets:new(kolus_managers, [set,protected,{read_concurrency,true}]),
     true = gproc:reg(?LOOKUP_PID({Ip, Port}), Tid),
     Limit = kolus_app:config(endpoint_connection_limit),
