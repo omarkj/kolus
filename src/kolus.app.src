@@ -3,7 +3,7 @@
  [
   {description, "TCP connection balancing manager"},
   {vsn, "0.1"},
-  {registered, [kolus_sup, kolus_managers_sup]},
+  {registered, [kolus_sup, kolus_director]},
   {applications, [gproc,
                   kernel,
                   stdlib

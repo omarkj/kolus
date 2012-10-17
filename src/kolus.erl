@@ -63,7 +63,7 @@ connect(Identifier, {Ip, Port}, Opts) ->
 	    connect(Identifier, Pid, Opts);
 	[] ->
 	    % Lets create a manager
-	    Pid = kolus_managers_sup:create_manager(Identifier, Ip, Port),
+	    Pid = kolus_director:create_manager(Identifier, Ip, Port),
 	    connect(Identifier, Pid, Opts)
     end.
 
