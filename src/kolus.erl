@@ -109,37 +109,23 @@ check_backends([Backend|Backends], Res) ->
 
 check_backend(#kolus_backend{manager=undefined,
 			       ip=Ip,port=Port}) ->
-    case gproc:lookup_value(?LOOKUP_PID({Ip, Port})) of
+    case gproc:lookup_value(?IDLE_KEY({Ip, Port})) of
 	[] ->
 	    #kolus_backend{ip=Ip,port=Port};
-	[{Pid,Tid}] ->
-	    check_backend(Ip, Port, Pid, Tid)
-    end;
-check_backend(#kolus_backend{manager=Pid,manager_status=Tid,
-			       ip=Ip,port=Port}) ->
-    case erlang:is_process_alive(Pid) of
-	true ->
-	    check_backend(Ip, Port, Pid, Tid);
-	false ->
-	    #kolus_backend{ip=Ip,port=Port}
+	[{Pid,Idle}] ->
+	    check_backend(Ip, Port, Pid, Idle)
     end;
 check_backend({Ip,Port}=Backend) ->
-    case gproc:lookup_values(?LOOKUP_PID(Backend)) of
+    case gproc:lookup_values(?IDLE_KEY(Backend)) of
 	[] ->
 	    #kolus_backend{ip=Ip,
 			   port=Port};
-	[{Pid, Tid}] ->
-	    [{idle,Idle}, {unused,Unused}] = ets:tab2list(Tid),
-	    #kolus_backend{ip=Ip,
-			   port=Port,
-			   idle=Idle,
-			   unused=Unused,
-			   manager=Pid,
-			   manager_status=Tid}
+	[{Pid, Idle}] ->
+	    check_backend(Ip, Port, Pid, Idle)
     end.
 
-check_backend(Ip, Port, Pid, Tid) ->
-    [{idle,Idle}, {unused,Unused}] = ets:tab2list(Tid),
+check_backend(Ip, Port, Pid, Idle) ->
+    [{Pid,Unused}] = gproc:lookup_values(?UNUSED_KEY({Ip,Port})),
     #kolus_backend{ip=Ip,
 		   port=Port,
 		   manager=Pid,
