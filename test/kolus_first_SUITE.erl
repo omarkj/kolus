@@ -138,6 +138,7 @@ full_manager(Config) ->
     {socket, KSocket2} = kolus:connect(<<"test">>, hd(Backends)),
     ok = kolus:return(KSocket2),
     ok = kolus:return(KSocket1),
+    ok = application:set_env(kolus, endpoint_connection_limit, 10),
     Config.
 
 changed_ident(Config) ->
