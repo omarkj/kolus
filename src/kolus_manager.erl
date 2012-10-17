@@ -11,6 +11,7 @@
 		active_sockets=[] :: [{reference(), port()}]|[],
 		idle_sockets=[] :: [{reference(), port()}]|[],
 		tid :: ets:tid(),
+		manager_timer :: reference()|undefined,
 		closed=false::boolean()
 	       }).
 
@@ -54,20 +55,28 @@ init([Identifier, Ip, Port]) ->
     ets:insert(Tid, [{idle,0},{unused,Limit}]),
     {ok, #state{ip=Ip,port=Port,
 		limit=Limit,identifier=Identifier,
-		tid=Tid}, ?IDLE_TIMEOUT}.
+		manager_timer=maybe_set_timer([], []),
+		tid=Tid}}.
 
 handle_cast({return, CallerMonitorRef, Socket}, #state{active_sockets=ActiveSockets,tid=Tid,
-						       idle_sockets=IdleSockets}=State) ->
+						       idle_sockets=IdleSockets,
+						       manager_timer=MngrTimer}=State) ->
     FoundSocket = find_socket(CallerMonitorRef, ActiveSockets),
     {ActiveSockets0, IdleSockets0} = return_socket(Socket, FoundSocket, ActiveSockets, IdleSockets),
     increment_idle(Tid),
-    {noreply, State#state{idle_sockets=IdleSockets0, active_sockets=ActiveSockets0}};
+    cancel_timer(MngrTimer),
+    {noreply, State#state{idle_sockets=IdleSockets0, active_sockets=ActiveSockets0,
+			  manager_timer=undefined}};
 handle_cast({return_unusable, CallerMonitorRef}, #state{active_sockets=ActiveSockets,
+							idle_sockets=IdleSockets,
+							manager_timer=Ref,
 							tid=Tid}=State) ->
     FoundSocket = find_socket(CallerMonitorRef, ActiveSockets),
     ActiveSockets0 = remove_dead_socket(FoundSocket, ActiveSockets),
     increment_unused(Tid),
-    {noreply, State#state{active_sockets=ActiveSockets0}};
+    cancel_timer(Ref),
+    {noreply, State#state{active_sockets=ActiveSockets0,
+			  manager_timer=maybe_set_timer(ActiveSockets0,IdleSockets)}};
     
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -77,39 +86,61 @@ handle_cast(_Msg, State) ->
 handle_call({get, Identifier, Caller}, _From, #state{idle_sockets=[],
 						     ip=Ip,port=Port,tid=Tid,
 						     active_sockets=Active,limit=Limit,
+						     manager_timer=Ref,
 						     identifier=Identifier}=State) when Limit > length(Active) ->
     CallerMonitorRef = erlang:monitor(process, Caller),
     decrement_unused(Tid),
-    {reply, {create, CallerMonitorRef, Ip, Port}, State#state{active_sockets=add_socket(CallerMonitorRef, undefined, Active)}};
+    ActiveSockets0 = add_socket(CallerMonitorRef, undefined, Active),
+    cancel_timer(Ref),
+    {reply, {create, CallerMonitorRef, Ip, Port}, State#state{active_sockets=ActiveSockets0,
+							      manager_timer=undefined}};
 
 handle_call({get, Identifier, Caller}, _From,
             #state{idle_sockets = [{TimerRef, Socket} | Sockets],
                    active_sockets = Active, tid = Tid,
+		   manager_timer = ManagerTimerRef,
                    identifier = Identifier} = State) ->
     cancel_timer(TimerRef),
     CallerMonitorRef = erlang:monitor(process, Caller),
     decrement_idle(Tid),
     ActiveSockets0 = add_socket(CallerMonitorRef,Socket, Active),
     ok = gen_tcp:controlling_process(Socket, Caller),
+    cancel_timer(ManagerTimerRef),
     {reply, {socket, CallerMonitorRef, Socket}, State#state{active_sockets=ActiveSockets0,
-							    idle_sockets=Sockets}};
+							    idle_sockets=Sockets,
+							    manager_timer=undefined}};
 handle_call({get, _, _}, _From, State) ->
     {reply, rejected, State};
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State};
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 % A socket has timed out, close it and remove
-handle_info({timeout, TimerRef, close}, #state{idle_sockets=Idle,tid=Tid}=State) ->
+handle_info({timeout, TimerRef, close}, #state{idle_sockets=Idle,
+					       active_sockets=Active,
+					       manager_timer = Ref,
+					       tid=Tid}=State) ->
     {_,Socket} = find_socket(TimerRef, Idle),
     ok = close_socket(Socket),
     decrement_idle(Tid),
     increment_unused(Tid),
-    {noreply, State#state{idle_sockets=remove_socket(TimerRef, Idle)}};
+    cancel_timer(Ref),
+    Idle0 = remove_socket(TimerRef, Idle),
+    Ref0 = maybe_set_timer(Idle0, Active),
+    {noreply, State#state{idle_sockets = Idle0,
+			  manager_timer = Ref0}};
 
-handle_info(timeout, State) ->
+handle_info({timeout, TimerRef, mngr_timeout}, #state{manager_timer = TimerRef,
+						      idle_sockets=[],
+						      active_sockets=[]}=State) ->
     {stop, normal, State};
+% Should not happen, but lets stay safe
+handle_info({timeout, TimerRef, mngr_timeout}, #state{manager_timer = TimerRef}=State) ->
+    {noreply, State#state{manager_timer=undefined}};
 
 handle_info(_Info, State) ->
+    error_logger:info_msg("Hi my name is ~p", [_Info]),
     {noreply, State}.
 
 terminate(Reason, _State) ->
@@ -152,6 +183,11 @@ return_socket(Socket, {CallerMonitorRef, _}, ActiveSockets, IdleSockets) ->
     TimerRef = erlang:start_timer(?SOCK_IDLE_TIMEOUT, self(), close),
     {remove_socket(CallerMonitorRef, ActiveSockets),
      IdleSockets++[{TimerRef, Socket}]}.
+
+maybe_set_timer([], []) ->
+    erlang:start_timer(?IDLE_TIMEOUT, self(), mngr_timeout);
+maybe_set_timer(_, _) ->
+    undefined.
 
 cancel_timer(undefined) ->
     ok;
