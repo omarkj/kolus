@@ -19,6 +19,7 @@
 
 % API
 -export([start_link/3,
+	 stop_sync/1,
 	 get_socket/4,
 	 return_socket/3,
 	 return_unusable_socket/2]).
@@ -29,6 +30,12 @@
 
 start_link(Identifier, Ip, Port) ->
     gen_server:start_link(?MODULE, [Identifier, Ip, Port], []).
+
+% Adding this like this since I'll be removing the supervisor soon enough,
+% don't see why you'd want to stop them (it's here for testing).
+% @TODO: what to do with callers that might have connections checked out?
+stop_sync(Pid) ->
+    gen_server:call(Pid, stop).
 
 get_socket(Pid, Identifier, Caller, Opts) ->
     Timeout = kolus_helper:get_key_or_default(timeout, Opts, 5000),
