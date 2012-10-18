@@ -118,7 +118,7 @@ check_backends([Backend|Backends], Res) ->
 
 check_backend(#kolus_backend{manager=undefined,
 			       ip=Ip,port=Port}) ->
-    case gproc:lookup_value(?LOOKUP_PID({Ip, Port})) of
+    case gproc:lookup_values(?LOOKUP_PID({Ip, Port})) of
 	[] ->
 	    #kolus_backend{ip=Ip,port=Port};
 	[{Pid,Tid}] ->
