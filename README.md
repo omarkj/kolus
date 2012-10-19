@@ -141,6 +141,11 @@ fill_first(Backends) ->
 {socket, Socket} = kolus:select(<<"test">>, Backends, fun ff_filter/1).
 ```
 
+Example
+-------
+
+For an example check out [kolus_demo](https://github.com/omarkj/kolus_demo)
+
 License
 -------
 
