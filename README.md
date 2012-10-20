@@ -1,9 +1,10 @@
 kolus
 =====
 
-Kolus is a library to help you manager your open TCP connections,
-manager connections to your various backends as well as help you
-balance connections to your backends.
+Kolus is a library to help you manage your open TCP connections to
+your various backends. It also helps you balance connections to those
+backends.
+
 
 Setup
 -----
