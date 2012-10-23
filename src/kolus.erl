@@ -71,6 +71,7 @@ return(#kolus_socket{socket=Socket,manager=Manager,ref=Ref}=KSocket) ->
 		    % An error came up returning the socket - the most likely
 		    % reason is that the remote of the socket is refusing connections
 		    % but the socket is in active false. Mark it as dead.
+		    catch gen_tcp:close(Socket),
 		    finished(KSocket)
 	    end;
 	_ ->
